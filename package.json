@@ -7,17 +7,17 @@
     "surfline-mcp": "dist/presentation/mcp/server.js"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0",
-    "dotenv": "^17.2.2",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "dotenv": "^17.4.2",
     "impit": "^0.14.5"
   },
   "devDependencies": {
-    "@types/jest": "^28.0.0",
-    "@types/node": "^20.12.12",
-    "jest": "^28.0.0",
-    "prettier": "^3.6.2",
-    "ts-jest": "^28.0.0",
-    "typescript": "^5.9.2"
+    "@types/jest": "^30.0.0",
+    "@types/node": "^26.5.1",
+    "jest": "^30.5.1",
+    "prettier": "^3.9.6",
+    "ts-jest": "^29.4.12",
+    "typescript": "^5.9.3"
   },
   "engines": {
     "node": "^26.0.0"
