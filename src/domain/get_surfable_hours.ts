@@ -1,4 +1,3 @@
-import { SurflineHttpClient } from '../infrastructure/surfline_client/http_client';
 import {
   Rating,
   Sunlight,
@@ -23,20 +22,12 @@ const RATING_ORDER: RatingInfo['key'][] = [
 
 export const getSurfableHours = async (
   spotIds: string[],
-  client?: SurflineClient,
+  client: SurflineClient,
   forDays: number = 7,
   now: number = Date.now() / 1000,
   criteria: SurfCriteria = DEFAULT_SURF_CRITERIA,
 ): Promise<SurfableHour[]> => {
   const surfableHours: SurfableHour[] = [];
-
-  if (!client) {
-    client = new SurflineHttpClient();
-    await client.login(
-      process.env.SURFLINE_EMAIL as string,
-      process.env.SURFLINE_PASSWORD as string,
-    );
-  }
 
   for (const spotId of spotIds) {
     const [ratingsResponse, sunlightResponse, surfResponse, windResponse] =

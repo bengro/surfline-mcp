@@ -1,393 +1,148 @@
-# Surfcal
+# surfline-mcp
 
-🏄‍♂️ **Never miss the perfect wave again!** Surfcal is your intelligent surf forecasting companion that combines real-time Surfline data with your Google Calendar to find the exact moments when epic surf conditions align with your free time.
+Bring your authenticated Surfline forecasts to your agent. **surfline-mcp** signs in with your Surfline account and exposes the premium forecast data available to your subscription through MCP.
 
-Whether you're chasing dawn patrol sessions, planning weekend surf trips, or comparing conditions across multiple breaks, Surfcal delivers precise surfable hour predictions with smart calendar conflict detection. Get visual indicators for when great waves clash with meetings, so you can make informed decisions about rescheduling that Zoom call for overhead barrels!
+Agents can retrieve waves, wind, tides, weather and daylight forecasts, discover spots, and ask for **surfable hours**: daylight hours that meet a minimum wave height and surf rating. The agent can then combine those hours with its own calendar connector to plan a session.
 
-✨ **Features that will revolutionize your surf planning:**
+You supply your Surfline credentials; the server handles authentication and forecast retrieval. Premium forecast access depends on your account's subscription and permissions. This server requests up to seven days of forecasts.
 
-- 🌊 Real-time surf condition analysis from Surfline's premium data
-- 💨 Comprehensive wind data including speed, direction, and onshore/offshore indicators
-- 📅 Smart calendar integration that shows conflicts without hiding opportunities
-- 🎯 Multi-spot comparisons to find the best waves in your area
-- ⚙️ Configurable criteria for wave height and surf rating thresholds
-- ☀️ Intelligent filtering to daylight hours only
-- 🔮 7-day forecasting to plan your entire surf week
+surfline-mcp runs over stdio. It does not access calendars or create events.
 
-Example:
+## Intended use and Terms of Service
 
-```
-npx surfcal --spotId 584204214e65fad6a7709cef --spotId 584204204e65fad6a77090bc --spotId 584204204e65fad6a77090bc --week --wave-min 3 --rating-min FAIR --calendar personal@gmail.com --calendar work@employer.io
-```
+This is for **paying Surfline subscribers** who would otherwise open the website
+to answer one question: _should I go surfing?_ It asks your agent instead, using
+the same forecasts your subscription already entitles you to. Personal use, your
+own account, your own machine.
 
-![example.png](example.png)
+Be aware that this is likely against Surfline's
+[Terms of Use](https://www.surfline.com/terms-of-use), which prohibit using "any
+robot, spider, scraper or other automated means to access the Services". There
+is no sanctioned developer API for subscribers: the Surfline Compatible Program
+is a hardware partnership, not a self-serve API. Surfline also fronts the API
+with Cloudflare bot management, which this server works around (see
+[below](#why-the-requests-impersonate-a-browser)).
 
-## Usage
-
-### CLI Tool
-
-After building, use the CLI tool directly. The tool now supports multiple surf spots and calendar integration for comprehensive condition checking:
-
-```
-surfcal [--spotId spotId1] [--spotId spotId2] ... [--calendar calendarId1] [--calendar calendarId2] ... [--wave-min feet] [--rating-min rating] [--today | --tomorrow | --week | --on dd/mm/yyyy]
-```
-
-### Available Options
-
-- `--spotId`: Surf spot ID (can be used multiple times for comparing spots)
-- `--calendar`: Google Calendar ID to filter out busy times (can be used multiple times)
-- `--wave-min`: Minimum wave height in feet (default: 2)
-- `--rating-min`: Minimum surf rating (default: POOR_TO_FAIR)
-    - Valid ratings: VERY_POOR, POOR, POOR_TO_FAIR, FAIR, GOOD, VERY_GOOD
-- `--today`: Get surfable hours for today
-- `--tomorrow`: Get surfable hours for tomorrow
-- `--week`: Get surfable hours for the next 7 days
-- `--on dd/mm/yyyy`: Get surfable hours for a specific date
-
-### Single Spot Examples
-
-1. Get surfable hours for today:
-
-   ```
-   surfcal --spotId 5842041f4e65fad6a7708876 --today
-   ```
-
-2. Get surfable hours for tomorrow:
-
-   ```
-   surfcal --spotId 5842041f4e65fad6a7708876 --tomorrow
-   ```
-
-3. Get surfable hours for the next 7 days:
-
-   ```
-   surfcal --spotId 5842041f4e65fad6a7708876 --week
-   ```
-
-4. Get surfable hours for a specific date:
-   ```
-   surfcal --spotId 5842041f4e65fad6a7708876 --on 15/09/2025
-   ```
-
-### Custom Criteria Examples (NEW!)
-
-The CLI now supports customizable surf criteria to match your preferences and skill level:
-
-1. **Higher wave requirements** (for experienced surfers):
-
-   ```
-   surfcal --spotId 5842041f4e65fad6a7708876 --wave-min 4 --rating-min GOOD --today
-   ```
-
-2. **Lower wave requirements** (for beginners):
-
-   ```
-   surfcal --spotId 5842041f4e65fad6a7708876 --wave-min 1.5 --rating-min POOR --today
-   ```
-
-3. **Premium conditions only** (for epic sessions):
-
-   ```
-   surfcal --spotId 5842041f4e65fad6a7708876 --wave-min 6 --rating-min VERY_GOOD --week
-   ```
-
-4. **Combined with calendar integration**:
-   ```
-   surfcal --spotId 5842041f4e65fad6a7708876 --calendar work@company.com --wave-min 3 --rating-min FAIR --week
-   ```
-
-### Multiple Spot Examples (NEW!)
-
-1. Compare conditions at multiple spots for today:
-
-   ```
-   surfcal --spotId 5842041f4e65fad6a7708876 --spotId 5842041f4e65fad6a7708815 --today
-   ```
-
-2. Check weekly conditions across multiple California spots:
-
-   ```
-   surfcal --spotId 5842041f4e65fad6a7708876 --spotId 5842041f4e65fad6a7708962 --week
-   ```
-
-3. Plan a surf trip for a specific date across multiple spots:
-   ```
-   surfcal --spotId 5842041f4e65fad6a7708876 --spotId 5842041f4e65fad6a7708815 --spotId 5842041f4e65fad6a770883d --on 20/09/2025
-   ```
-
-### Calendar Integration Examples (NEW!)
-
-The CLI now supports Google Calendar integration to mark surfable hours that conflict with your meetings and appointments. Instead of hiding conflicted times, it shows ALL surfable hours with clear visual indicators for calendar conflicts!
-
-1. **Single calendar integration:**
-
-   ```
-   surfcal --spotId 5842041f4e65fad6a7708876 --calendar my@email.com --today
-   ```
-
-2. **Multiple calendars (work + personal):**
-
-   ```
-   surfcal --spotId 5842041f4e65fad6a7708876 --calendar work@company.com --calendar personal@gmail.com --week
-   ```
-
-3. **Multiple spots with calendar integration:**
-
-   ```
-   surfcal --spotId 5842041f4e65fad6a7708876 --spotId 5842041f4e65fad6a7708815 --calendar my@email.com --tomorrow
-   ```
-
-4. **Plan a surf trip with calendar awareness:**
-   ```
-   surfcal --spotId 5842041f4e65fad6a7708876 --spotId 5842041f4e65fad6a7708962 --calendar work@company.com --calendar personal@gmail.com --on 20/09/2025
-   ```
-
-**Note:** Calendar integration requires the `GOOGLE_CALENDAR_API_KEY` environment variable. Without it, the tool works normally but won't show calendar conflict indicators.
-
-### Popular Surf Spot IDs
-
-- **Malibu** (California): `5842041f4e65fad6a7708876`
-- **Pipeline** (Hawaii): `5842041f4e65fad6a7708815`
-- **Bells Beach** (Australia): `5842041f4e65fad6a770883d`
-- **Jeffreys Bay** (South Africa): `5842041f4e65fad6a7708962`
-
-### Output Format
-
-The CLI now provides enhanced output with:
-
-- Clear spot identification (📍 emoji)
-- Surfable hours grouped by spot
-- Condition details (rating and wave height)
-- **Comprehensive wind data** (NEW!)
-- **Calendar conflict indicators** (NEW!)
-- Hierarchical display for better readability
-
-Example output without calendar integration:
-
-```
-Surfable hours for the week (2 spots):
-
-📍 Spot: Malibu (5842041f4e65fad6a7708876)
-  📅 Monday, 16/09/2025:
-    🏄 08:00 - 09:00 (FAIR, 3.2ft) - Wind: 8 kts NW (offshore)
-    🏄 15:00 - 16:00 (GOOD, 4.1ft) - Wind: 12 kts W (offshore)
-
-📍 Spot: Pipeline (5842041f4e65fad6a7708815)
-  📅 Monday, 16/09/2025:
-    🏄 06:30 - 07:30 (VERY_GOOD, 5.8ft) - Wind: 15 kts NE (offshore)
-```
-
-Example output with calendar integration:
-
-```
-Surfable hours for today (1 spot) (filtered by 2 calendars):
-
-📍 Spot: Malibu (5842041f4e65fad6a7708876)
-  ⚠️ 10:00 - 11:00 (FAIR, 3.2ft) - Wind: 10 kts SE (onshore) [CALENDAR CONFLICT]
-  🏄 14:00 - 15:00 (GOOD, 4.1ft) - Wind: 8 kts NW (offshore)
-  🏄 17:00 - 18:00 (FAIR, 3.5ft) - Wind: 12 kts W (offshore)
-  ⚠️ 19:00 - 20:00 (GOOD, 4.5ft) - Wind: 15 kts NW (offshore) [CALENDAR CONFLICT]
-```
-
-#### Visual Indicators:
-
-- **🏄 Available**: No calendar conflicts - you're free to surf!
-- **⚠️ Conflict**: Overlaps with calendar events - might need to reschedule meetings
-- **[CALENDAR CONFLICT]**: Clear text indicator for conflicted times
-
-When calendar integration is active, ALL surfable hours are shown with clear visual indicators so you can make informed decisions about your surf sessions.
-
-If no valid command is provided, the tool displays usage information.
-
-### MCP Server
-
-Surfcal also provides an MCP (Model Context Protocol) server for AI-powered surf session scheduling. This allows AI agents like Claude to access surf condition data and integrate with calendar systems. The MCP server includes comprehensive wind data in all JSON responses for enhanced AI decision-making.
-
-#### MCP Server Usage
-
-1. **Start the MCP server:**
-
-   ```
-   npm run start:mcp
-   ```
-
-2. **Test the MCP server:**
-   ```
-   npm run test:mcp
-   ```
-
-#### MCP Integration with Claude Desktop
-
-To use Surfcal with Claude Desktop, you need to configure the MCP server in Claude's settings:
-
-1. **Build the project first:**
-   ```bash
-   npm run build
-   ```
-
-2. **Locate Claude Desktop's configuration file:**
-   - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-   - **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
-
-3. **Add Surfcal MCP server to the configuration:**
-   ```json
-   {
-     "mcpServers": {
-       "surfcal": {
-         "command": "node",
-         "args": ["/absolute/path/to/your/surfcal/dist/presentation/mcp/server.js"],
-         "env": {
-           "SURFLINE_EMAIL": "your_surfline_email@example.com",
-           "SURFLINE_PASSWORD": "your_surfline_password",
-           "GOOGLE_CALENDAR_API_KEY": "your_google_calendar_api_key"
-         }
-       }
-     }
-   }
-   ```
-
-4. **Replace the path with your actual project path:**
-   - Get your absolute path by running `pwd` in your surfcal directory
-   - Update the `args` array with the full path to `dist/presentation/mcp/server.js`
-
-5. **Set up environment variables:**
-   - Add your Surfline credentials to the `env` section
-   - Optionally add your Google Calendar API key for calendar integration
-
-6. **Restart Claude Desktop** to load the new configuration
-
-7. **Test the integration:**
-   - Open Claude Desktop
-   - Try asking: "What are the surfable hours at Malibu today?"
-   - Or: "Search for surf spots in California"
-   - Or: "What's the spot ID for Pipeline in Hawaii?"
-
-#### Available MCP Tools
-
-Once configured, Claude will have access to these surfcal tools:
-
-- **`get_surfable_hours_today`** - Get today's surfable hours for specific spots
-- **`get_surfable_hours_tomorrow`** - Get tomorrow's surfable hours
-- **`get_surfable_hours_week`** - Get the next 7 days of surfable hours
-- **`get_surfable_hours_date`** - Get surfable hours for a specific date
-- **`search_spots`** - Search for surf spots by name, region, or country
-
-#### MCP Resources
-
-Claude also has access to these resources:
-
-- **Popular surf spots** with their IDs for easy reference
-- **Server information** and capabilities
-
-#### Example Claude Conversations
-
-Once configured, you can have natural conversations with Claude like:
-
-- *"What's the best surf spot in California for tomorrow morning?"*
-- *"Find me surfable hours at Pipeline this week with at least 4ft waves"*
-- *"Search for surf spots near Newquay and check conditions"*
-- *"Compare surf conditions at Malibu and Pipeline for the weekend"*
-
-#### Troubleshooting
-
-- **Server not found**: Ensure the path in `claude_desktop_config.json` is absolute and correct
-- **Authentication errors**: Verify your Surfline credentials in the `env` section
-- **Permission issues**: Make sure the `dist/presentation/mcp/server.js` file is executable
-- **Build issues**: Run `npm run build` to ensure the server is compiled
-
-#### 🤖 AI Agent Vision: The Future of Intelligent Surf Planning
-
-The goal is to let the agent broker between Surfline and Google Calendar to find the best surf sessions for you.
-
-**🧠 Examples:**
-
-- _"There are 4ft waves at Malibu from 2-4pm, but you have a meeting from 3-4pm. Should I reschedule your meeting to catch these epic conditions?"_
-- _"I found perfect dawn patrol conditions at Pipeline tomorrow 6-8am, and your calendar is free. Want me to book travel and block your calendar?"_
-- _"Your usual surf spots are flat this week, but I found firing conditions at Jeffreys Bay. Should I check flight prices and move your meetings?"_
-
-- This architecture keeps Surfcal focused on delivering the best surf forecasting data while enabling limitless AI-powered surf planning possibilities!
-
-## Prerequisites
-
-- Node.js version ^18.14.0 or ^20.0.0
-- npm (comes with Node.js)
+So: use it personally at your own risk, keep your request volume in the range a
+person checking the forecast would generate, and do not build a product on it
+without talking to Surfline first.
 
 ## Setup
 
-1. Clone the repository:
+You need a Surfline account with access to the premium forecasts you want to retrieve. Use that account’s email and password below.
 
-   ```
-   git clone git@github.com:bengro/surfcal.git
-   cd surfcal
-   ```
+Use Node.js 26. `.tool-versions` selects your system-installed Node rather than an older asdf runtime. Then install and build:
 
-2. Install dependencies:
-
-   ```
-   npm install
-   ```
-
-3. Set up environment variables:
-   Create a `.env` file in the project root or export the following variables in your shell:
-
-   ```
-   SURFLINE_EMAIL=your_surfline_email@example.com
-   SURFLINE_PASSWORD=your_surfline_password
-   GOOGLE_CALENDAR_API_KEY=your_google_calendar_api_key  # Optional for calendar integration
-   ```
-
-   - `SURFLINE_EMAIL` and `SURFLINE_PASSWORD` are required for authenticating with Surfline's API
-   - `GOOGLE_CALENDAR_API_KEY` is optional and enables calendar integration features
-
-## Build
-
-Compile the TypeScript source code to JavaScript:
-
-```
+```sh
+npm ci
 npm run build
 ```
 
-This generates the `dist/` directory with compiled JavaScript files.
+Create `.env` using `.env.example` as a template, or fill in your existing `.env`:
 
-## Test
-
-Run the test suite using Jest:
-
-```
-npm test
+```dotenv
+SURFLINE_EMAIL="your-email@example.com"
+SURFLINE_PASSWORD="your-password"
 ```
 
-This executes all unit tests located in the `src/` directory.
+The server resolves `.env` relative to the installed script, so it works no matter which working directory your MCP client launches it from. Set `DOTENV_CONFIG_PATH` to point somewhere else. Existing environment variables take precedence. `.env` is gitignored. No Google credentials are required.
 
-## Linting
+### Why the requests impersonate a browser
 
-This project uses Prettier for code formatting. You can check for and fix linting issues using the following commands:
+Surfline sits behind Cloudflare bot management, which fingerprints the TLS ClientHello (JA3/JA4). Node's own TLS stack is blocklisted: every request to `services.surfline.com` returns `403` with a Cloudflare block page, with or without credentials, and no combination of headers, HTTP version or cipher ordering changes that. The client therefore uses [`impit`](https://www.npmjs.com/package/impit) to perform a Chrome-shaped handshake. Swapping it back to `axios`, `fetch` or `node:https` will break every request.
 
-- To check for linting errors:
+## Connect an MCP client
 
-  ```
-  npm run lint
-  ```
+Launch the built server directly. Use absolute paths for both Node and the
+script: clients start processes from a different working directory and without
+your shell's `PATH`, so an `asdf`/`nvm` shim will not resolve.
 
-- To automatically fix linting errors:
-  ```
-  npm run lint:fix
-  ```
+**Claude Code (CLI)** — registers it for every project:
 
-## Available Scripts
+```sh
+claude mcp add --scope user surfline -- /opt/homebrew/bin/node /absolute/path/to/surfline-mcp/dist/presentation/mcp/server.js
+claude mcp list   # surfline: ... - ✔ Connected
+```
 
-- `npm run build` - Compile TypeScript to JavaScript
-- `npm start` - Run the CLI tool
-- `npm run start:mcp` - Start the MCP server
-- `npm test` - Run Jest tests
-- `npm run test:mcp` - Test MCP server configuration
-- `npm run lint` - Check code formatting
-- `npm run lint:fix` - Fix code formatting issues
+**Claude Desktop** — merge into `~/Library/Application Support/Claude/claude_desktop_config.json`, then restart the app:
+
+```json
+{
+  "mcpServers": {
+    "surfline": {
+      "command": "/opt/homebrew/bin/node",
+      "args": ["/absolute/path/to/surfline-mcp/dist/presentation/mcp/server.js"]
+    }
+  }
+}
+```
+
+No `env` block is needed: the server finds its own `.env`, which keeps your
+password in a mode-600 file instead of a world-readable config. To supply
+credentials through the client instead, set `SURFLINE_EMAIL` and
+`SURFLINE_PASSWORD` in an `env` block. `src/presentation/mcp/mcp-config.json`
+contains a configuration template.
+
+For local use, `npm start` launches the built server; `npm run start:mcp` is an alias. Both wait for MCP messages on stdin. For an MCP client's command, launch Node directly as shown above so npm's status messages cannot interfere with the protocol. Runtime diagnostics go to stderr.
+
+The server authenticates on its first tool call and uses the resulting access token for Surfline requests. Tool and resource discovery work without credentials. The package executable is `surfline-mcp`.
+
+## Tools
+
+| Tool                          | Inputs                                                                        | Result                                                                 |
+| ----------------------------- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `search_spots`                | `query`                                                                       | Spot IDs, names, regions, countries and coordinates                    |
+| `get_spot_info`               | `spotId`                                                                      | Spot name, ID and coordinates                                          |
+| `get_spot_forecast`           | `spotId`, optional `days` (1–7, default 7), `intervalHours` (1–24, default 1) | Unfiltered waves, ratings, wind, tides, weather and daylight forecasts |
+| `get_surfable_hours_today`    | `spotId`, optional criteria                                                   | Remaining qualifying hours today, using the UTC date                   |
+| `get_surfable_hours_tomorrow` | `spotId`, optional criteria                                                   | Qualifying hours tomorrow, using the UTC date                          |
+| `get_surfable_hours_week`     | `spotId`, optional criteria                                                   | Qualifying hours over the next seven days                              |
+| `get_surfable_hours_date`     | `spotId`, `date` (`DD/MM/YYYY`, UTC), optional criteria                       | Qualifying hours on the requested date, within the available forecast  |
+
+The surfable-hours tools accept `waveMin` (feet, default 2) and `ratingMin` (default `POOR_TO_FAIR`). Ratings are `VERY_POOR`, `POOR`, `POOR_TO_FAIR`, `FAIR`, `GOOD`, and `VERY_GOOD`. These tools retain the project's daylight and conditions filtering. Use `get_spot_forecast` when the agent should decide which conditions are suitable or interpret dates in a spot's local timezone.
+
+Successful tool responses contain JSON in MCP text content, including empty results. Raw forecasts retain Surfline response metadata, Unix timestamps in seconds, and available UTC offsets. Requested units are feet for surf height, knots for wind speed, metres for tides, and Celsius for temperature. Coordinates are longitude, latitude. Surfable-hour start/end times are ISO 8601 UTC strings, so agents can compare them directly with calendar events.
+
+Forecast availability depends on Surfline and your account. This server fetches current forecasts, not historical data. An empty filtered result means no hours matched in the returned data; it does not prove that a date is within the forecast horizon.
+
+Resources:
+
+- `surfline-mcp://about`: server capabilities and configuration.
+- `surfline-mcp://spots/popular`: built-in example spots. Use `search_spots` to discover current spot IDs.
+
+Example agent requests:
+
+- “Find Great Western in Newquay and show me its wind, waves and tides for the next three days.”
+- “Compare tomorrow's surf at these two spots.”
+- “Use Surfline forecasts and my calendar connector to find a free morning with good surf.”
+
+## Development
+
+```sh
+npm run build        # Clean and compile production code
+npm test -- --runInBand # Offline domain, fake-client and MCP protocol tests
+npm run test:mcp     # MCP protocol tests
+npm run lint
+```
+
+Live Surfline contract tests are opt-in and require working credentials and network access:
+
+```sh
+npm run test:live
+```
+
+Production builds exclude test files and fake clients. Runtime dependencies are the MCP SDK, Axios and dotenv.
+
+## Migration from the CLI/calendar version
+
+- The project and package are now named `surfline-mcp`. Replace `surfcal-mcp` with `surfline-mcp` in executable-based client configurations.
+- Resource URIs now use `surfline-mcp://` instead of `surfcal://`. Update any saved resource references.
+- The old `surfcal` CLI and its flags have been removed; the surfable-hours MCP tool names remain unchanged.
+- `npm start` now launches the MCP server after a separate `npm run build`.
+- `GOOGLE_CALENDAR_API_KEY` is unused and can be removed from existing `.env` files.
+- Surfable-hour timestamps now include an explicit UTC timezone. Empty results are JSON rather than prose.
+- Tomorrow and date tools return only the requested UTC day.
 
 ## License
 
 ISC
-
-## Disclaimer
-
-This project was predominantly written by Cline/Gemini and Windsurf/Claude.

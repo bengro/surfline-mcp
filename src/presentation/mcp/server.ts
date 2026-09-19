@@ -1,4 +1,14 @@
 #!/usr/bin/env node
+import { config as loadEnv } from 'dotenv';
+import { join } from 'node:path';
+
+// Claude Desktop and the Claude CLI launch this server from an arbitrary
+// working directory, so resolve .env relative to the installed script.
+// Real environment variables still win: dotenv never overrides them.
+loadEnv({
+  path: process.env.DOTENV_CONFIG_PATH ?? join(__dirname, '../../../.env'),
+  quiet: true,
+});
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
@@ -10,6 +20,8 @@ import {
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { getSurfableHours } from '../../domain/get_surfable_hours.js';
+import { SurflineClient } from '../../infrastructure/surfline_client/surfline_client.js';
+import { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { SurflineHttpClient } from '../../infrastructure/surfline_client/http_client.js';
 import {
   SurfableHour,
@@ -17,15 +29,26 @@ import {
   DEFAULT_SURF_CRITERIA,
 } from '../../domain/types.js';
 
-class SurfcalMCPServer {
+export class SurflineMCPServer {
   private server: Server;
-  private surflineClient: SurflineHttpClient | null = null;
-  private spotNameCache = new Map<string, string>();
+  private surflineClient: SurflineClient | null = null;
+  private initialization: Promise<void> | null = null;
+  private spotNameCache = new Map<string, Promise<string>>();
 
-  constructor() {
+  constructor(
+    private readonly createClient: () => SurflineClient = () =>
+      new SurflineHttpClient(),
+    private readonly credentials: () => {
+      email?: string;
+      password?: string;
+    } = () => ({
+      email: process.env.SURFLINE_EMAIL,
+      password: process.env.SURFLINE_PASSWORD,
+    }),
+  ) {
     this.server = new Server(
       {
-        name: 'surfcal-mcp-server',
+        name: 'surfline-mcp',
         version: '1.0.0',
       },
       {
@@ -38,33 +61,36 @@ class SurfcalMCPServer {
 
     this.setupToolHandlers();
     this.setupResourceHandlers();
-    this.setupErrorHandling();
+    this.server.onerror = (error) => console.error('[MCP Error]', error);
   }
 
   private async initializeSurflineClient(): Promise<void> {
+    // ponytail: the access token lives ~30 days and is never refreshed, so a
+    // process kept alive past expiry fails every call until restart. Add a
+    // 401 -> re-login retry if that ever actually bites.
     if (this.surflineClient) {
       return;
     }
 
-    if (!process.env.SURFLINE_EMAIL || !process.env.SURFLINE_PASSWORD) {
+    if (!this.initialization) {
+      this.initialization = this.authenticate().finally(() => {
+        this.initialization = null;
+      });
+    }
+    await this.initialization;
+  }
+
+  private async authenticate(): Promise<void> {
+    const { email, password } = this.credentials();
+    if (!email || !password) {
       throw new McpError(
         ErrorCode.InvalidRequest,
         'SURFLINE_EMAIL and SURFLINE_PASSWORD environment variables are required',
       );
     }
-
-    this.surflineClient = new SurflineHttpClient();
-    try {
-      await this.surflineClient.login(
-        process.env.SURFLINE_EMAIL,
-        process.env.SURFLINE_PASSWORD,
-      );
-    } catch (error) {
-      throw new McpError(
-        ErrorCode.InternalError,
-        `Failed to authenticate with Surfline: ${error}`,
-      );
-    }
+    const client = this.createClient();
+    await client.login(email, password);
+    this.surflineClient = client;
   }
 
   private setupToolHandlers(): void {
@@ -72,8 +98,40 @@ class SurfcalMCPServer {
       return {
         tools: [
           {
+            name: 'get_spot_forecast',
+            description:
+              'Get unfiltered Surfline wave, rating, wind, tide, weather and daylight forecasts. Includes Unix timestamps in seconds and original metadata; use these to compare with other data sources.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                spotId: { type: 'string', minLength: 1 },
+                days: { type: 'integer', minimum: 1, maximum: 7, default: 7 },
+                intervalHours: {
+                  type: 'integer',
+                  minimum: 1,
+                  maximum: 24,
+                  default: 1,
+                },
+              },
+              required: ['spotId'],
+              additionalProperties: false,
+            },
+          },
+          {
+            name: 'get_spot_info',
+            description:
+              'Get a Surfline spot name, ID and coordinates (longitude, latitude).',
+            inputSchema: {
+              type: 'object',
+              properties: { spotId: { type: 'string', minLength: 1 } },
+              required: ['spotId'],
+              additionalProperties: false,
+            },
+          },
+          {
             name: 'get_surfable_hours_today',
-            description: 'Get surfable hours for today at a specific surf spot',
+            description:
+              'Get remaining surfable hours for today (UTC) at a specific surf spot',
             inputSchema: {
               type: 'object',
               properties: {
@@ -105,7 +163,7 @@ class SurfcalMCPServer {
           {
             name: 'get_surfable_hours_tomorrow',
             description:
-              'Get surfable hours for tomorrow at a specific surf spot',
+              'Get surfable hours for tomorrow (UTC) at a specific surf spot',
             inputSchema: {
               type: 'object',
               properties: {
@@ -179,7 +237,7 @@ class SurfcalMCPServer {
                 },
                 date: {
                   type: 'string',
-                  description: 'Date in DD/MM/YYYY format',
+                  description: 'UTC date in DD/MM/YYYY format',
                   pattern: '^\\d{2}/\\d{2}/\\d{4}$',
                 },
                 waveMin: {
@@ -205,13 +263,15 @@ class SurfcalMCPServer {
           },
           {
             name: 'search_spots',
-            description: 'Search for surf spots by name, region, or location to get their spot IDs',
+            description:
+              'Search for surf spots by name, region, or location to get their spot IDs',
             inputSchema: {
               type: 'object',
               properties: {
                 query: {
                   type: 'string',
-                  description: 'Search query for surf spot name, region, or location (e.g., "Great Western", "Cornwall", "Malibu")',
+                  description:
+                    'Search query for surf spot name, region, or location (e.g., "Great Western", "Cornwall", "Malibu")',
                   minLength: 1,
                 },
               },
@@ -225,10 +285,48 @@ class SurfcalMCPServer {
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const { name, arguments: args } = request.params;
 
+      this.validateArguments(name, args ?? {});
       try {
         await this.initializeSurflineClient();
 
         switch (name) {
+          case 'get_spot_info':
+            return this.jsonResponse(
+              await this.surflineClient!.getSpotInfo(args!.spotId as string),
+            );
+          case 'get_spot_forecast': {
+            const spotId = args!.spotId as string;
+            const days = (args?.days as number | undefined) ?? 7;
+            const interval = (args?.intervalHours as number | undefined) ?? 1;
+            const client = this.surflineClient!;
+            const [surf, ratings, wind, tides, weather, sunlight] =
+              await Promise.all([
+                client.getSurf(spotId, days, interval),
+                client.getRatings(spotId, days, interval),
+                client.getWind(spotId, days, interval),
+                client.getTides(spotId, days),
+                client.getWeather(spotId, days, interval),
+                client.getSunlight(spotId, days),
+              ]);
+            return this.jsonResponse({
+              spotId,
+              days,
+              intervalHours: interval,
+              timestampUnit: 'unix_seconds',
+              units: {
+                surfHeight: 'ft',
+                windSpeed: 'kts',
+                tideHeight: 'm',
+                temperature: 'C',
+              },
+              surf,
+              ratings,
+              wind,
+              tides,
+              weather,
+              sunlight,
+            });
+          }
           case 'get_surfable_hours_today':
             return await this.getSurfableHoursToday(
               args?.spotId as string,
@@ -271,10 +369,15 @@ class SurfcalMCPServer {
         if (error instanceof McpError) {
           throw error;
         }
-        throw new McpError(
-          ErrorCode.InternalError,
-          `Error executing tool ${name}: ${error}`,
-        );
+        return {
+          isError: true,
+          content: [
+            {
+              type: 'text' as const,
+              text: `Surfline request failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            },
+          ],
+        };
       }
     });
   }
@@ -284,17 +387,17 @@ class SurfcalMCPServer {
       return {
         resources: [
           {
-            uri: 'surfcal://spots/popular',
+            uri: 'surfline-mcp://spots/popular',
             mimeType: 'application/json',
             name: 'Popular Surf Spots',
             description: 'A list of popular surf spots with their Surfline IDs',
           },
           {
-            uri: 'surfcal://about',
+            uri: 'surfline-mcp://about',
             mimeType: 'text/plain',
-            name: 'About Surfcal',
+            name: 'About surfline-mcp',
             description:
-              'Information about the Surfcal MCP server and its capabilities',
+              'Information about the surfline-mcp and its capabilities',
           },
         ],
       };
@@ -306,7 +409,7 @@ class SurfcalMCPServer {
         const { uri } = request.params;
 
         switch (uri) {
-          case 'surfcal://spots/popular':
+          case 'surfline-mcp://spots/popular':
             return {
               contents: [
                 {
@@ -351,15 +454,15 @@ class SurfcalMCPServer {
               ],
             };
 
-          case 'surfcal://about':
+          case 'surfline-mcp://about':
             return {
               contents: [
                 {
                   uri,
                   mimeType: 'text/plain',
-                  text: `Surfcal MCP Server
+                  text: `surfline-mcp
 
-This MCP server provides access to comprehensive surf condition data from Surfline. It allows AI agents to:
+This MCP server authenticates with your Surfline account to expose the premium forecast data available to your subscription. It allows AI agents to:
 
 1. Get surfable hours for today, tomorrow, or a specific date
 2. Get surfable hours for the next 7 days
@@ -367,13 +470,15 @@ This MCP server provides access to comprehensive surf condition data from Surfli
 4. Get detailed wind data including speed, direction, and onshore/offshore classification
 
 Available Tools:
+- get_spot_forecast: Unfiltered waves, ratings, wind, tides, weather and daylight forecasts
+- get_spot_info: Spot name and coordinates
 - get_surfable_hours_today: Get today's surfable conditions
 - get_surfable_hours_tomorrow: Get tomorrow's surfable conditions  
 - get_surfable_hours_week: Get next 7 days of surfable conditions
 - get_surfable_hours_date: Get conditions for a specific date
 - search_spots: Search for surf spots by name, region, or location to get spot IDs
 
-All tools require a spotId parameter (Surfline spot ID) and optionally accept:
+Surfable-hours tools require a spotId parameter (Surfline spot ID) and optionally accept:
 - waveMin: Minimum wave height in feet (default: 2)
 - ratingMin: Minimum surf rating (default: POOR_TO_FAIR)
 
@@ -387,6 +492,10 @@ The server filters conditions based on:
 - Configurable minimum wave height (default: 2 feet)
 - Configurable minimum rating (default: "Poor to Fair" or better)
 - Daylight hours only
+
+Agents combine these forecasts with their own calendar connectors. This server does not access calendars or schedule events.
+
+Forecast access depends on your Surfline subscription and permissions. Forecast requests cover up to seven days.
 
 Environment variables required:
 - SURFLINE_EMAIL: Your Surfline account email
@@ -432,7 +541,12 @@ Environment variables required:
       content: [
         {
           type: 'text',
-          text: await this.formatSurfableHoursResponse(surfableHours, 'today'),
+          text: await this.formatSurfableHoursResponse(
+            surfableHours.filter(
+              (hour) => hour.startTime < (Math.floor(now / 86400) + 1) * 86400,
+            ),
+            'today',
+          ),
         },
       ],
     };
@@ -453,7 +567,7 @@ Environment variables required:
     };
 
     const now = Date.now() / 1000;
-    const tomorrowNow = now + 86400; // Add 24 hours
+    const tomorrowNow = (Math.floor(now / 86400) + 1) * 86400;
     const surfableHours = await getSurfableHours(
       [spotId],
       this.surflineClient!,
@@ -467,7 +581,9 @@ Environment variables required:
         {
           type: 'text',
           text: await this.formatSurfableHoursResponse(
-            surfableHours,
+            surfableHours.filter(
+              (hour) => hour.startTime < tomorrowNow + 86400,
+            ),
             'tomorrow',
           ),
         },
@@ -538,9 +654,7 @@ Environment variables required:
 
     const [day, month, year] = date.split('/');
     const targetDate = new Date(
-      parseInt(year),
-      parseInt(month) - 1,
-      parseInt(day),
+      Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day)),
     );
     const targetNow = targetDate.getTime() / 1000;
 
@@ -556,7 +670,10 @@ Environment variables required:
       content: [
         {
           type: 'text',
-          text: await this.formatSurfableHoursResponse(surfableHours, date),
+          text: await this.formatSurfableHoursResponse(
+            surfableHours.filter((hour) => hour.startTime < targetNow + 86400),
+            date,
+          ),
         },
       ],
     };
@@ -570,18 +687,7 @@ Environment variables required:
     try {
       const searchResults = await this.surflineClient!.searchSpots(query);
 
-      if (searchResults.spots.length === 0) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `🔍 No surf spots found matching "${query}". Try searching with different terms like spot name, region, or country.`,
-            },
-          ],
-        };
-      }
-
-      const formattedResults = searchResults.spots.map(spot => ({
+      const formattedResults = searchResults.spots.map((spot) => ({
         spotId: spot._id,
         name: spot.name,
         region: spot.region,
@@ -620,35 +726,23 @@ Environment variables required:
     surfableHours: SurfableHour[],
     timeframe: string,
   ): Promise<string> {
-    if (surfableHours.length === 0) {
-      return `🌊 No surfable hours found for ${timeframe}. The conditions might not be favorable for surfing during this period.`;
-    }
-
     const formattedHours = await Promise.all(
       surfableHours.map(async (hour) => {
         const startTime = new Date(hour.startTime * 1000);
         const endTime = new Date(hour.endTime * 1000);
 
-        const formatTime = (date: Date) => {
-          return date.toLocaleString('en-GB', {
-            weekday: 'long',
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: false,
-          });
-        };
-
         const spotName = await this.getSpotName(hour.spotId);
         const spotDisplay = this.formatSpotDisplay(spotName, hour.spotId);
 
-        const windInfo = this.formatWindInfo(hour.windSpeed, hour.windDirection, hour.windDirectionType);
+        const windInfo = this.formatWindInfo(
+          hour.windSpeed,
+          hour.windDirection,
+          hour.windDirectionType,
+        );
 
         return {
-          startTime: formatTime(startTime),
-          endTime: formatTime(endTime),
+          startTime: startTime.toISOString(),
+          endTime: endTime.toISOString(),
           condition: hour.condition,
           waveHeight: hour.waveHeight,
           windSpeed: hour.windSpeed,
@@ -672,40 +766,152 @@ Environment variables required:
     );
   }
 
-  private isValidDate(dateString: string): boolean {
-    const parts = dateString.split('/');
-    if (parts.length !== 3) return false;
-    const [day, month, year] = parts.map(Number);
-    if (isNaN(day) || isNaN(month) || isNaN(year)) return false;
-    if (day < 1 || day > 31 || month < 1 || month > 12) return false;
-    return true;
+  private isValidDate(value: string): boolean {
+    if (!/^\d{2}\/\d{2}\/\d{4}$/.test(value)) return false;
+    const [day, month, year] = value.split('/').map(Number);
+    const date = new Date(Date.UTC(year, month - 1, day));
+    return (
+      date.getUTCFullYear() === year &&
+      date.getUTCMonth() === month - 1 &&
+      date.getUTCDate() === day
+    );
   }
 
-  private async getSpotName(spotId: string): Promise<string> {
-    if (this.spotNameCache.has(spotId)) {
-      return this.spotNameCache.get(spotId)!;
-    }
+  private jsonResponse(value: unknown) {
+    return {
+      content: [{ type: 'text' as const, text: JSON.stringify(value) }],
+    };
+  }
 
-    try {
-      const spotInfo = await this.surflineClient!.getSpotInfo(spotId);
-      const spotName = spotInfo.name;
-      this.spotNameCache.set(spotId, spotName);
-      return spotName;
-    } catch (error) {
-      console.error(
-        `Warning: Could not fetch name for spot ${spotId}, using ID instead`,
-      );
-      return spotId;
+  private validateArguments(name: string, args: Record<string, unknown>): void {
+    const hourTools = [
+      'get_surfable_hours_today',
+      'get_surfable_hours_tomorrow',
+      'get_surfable_hours_week',
+      'get_surfable_hours_date',
+    ];
+    if (
+      ![
+        ...hourTools,
+        'search_spots',
+        'get_spot_info',
+        'get_spot_forecast',
+      ].includes(name)
+    ) {
+      throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
     }
+    const field = name === 'search_spots' ? 'query' : 'spotId';
+    if (typeof args[field] !== 'string' || !args[field].trim()) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        `${field} must be a non-empty string`,
+      );
+    }
+    if (name === 'get_spot_forecast') {
+      for (const [field, max] of [
+        ['days', 7],
+        ['intervalHours', 24],
+      ] as const) {
+        const value = args[field];
+        if (
+          value !== undefined &&
+          (typeof value !== 'number' ||
+            !Number.isInteger(value) ||
+            value < 1 ||
+            value > max)
+        ) {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            `${field} must be an integer from 1 to ${max}`,
+          );
+        }
+      }
+    }
+    if (hourTools.includes(name)) {
+      if (
+        args.waveMin !== undefined &&
+        (typeof args.waveMin !== 'number' ||
+          !Number.isFinite(args.waveMin) ||
+          args.waveMin < 0)
+      ) {
+        throw new McpError(
+          ErrorCode.InvalidParams,
+          'waveMin must be a non-negative number',
+        );
+      }
+      if (
+        args.ratingMin !== undefined &&
+        ![
+          'VERY_POOR',
+          'POOR',
+          'POOR_TO_FAIR',
+          'FAIR',
+          'GOOD',
+          'VERY_GOOD',
+        ].includes(String(args.ratingMin))
+      ) {
+        throw new McpError(ErrorCode.InvalidParams, 'Invalid ratingMin');
+      }
+    }
+    if (
+      name === 'get_surfable_hours_date' &&
+      (typeof args.date !== 'string' || !this.isValidDate(args.date))
+    ) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        'date must be a valid date in DD/MM/YYYY format',
+      );
+    }
+  }
+
+  private getSpotName(spotId: string): Promise<string> {
+    // Cache the in-flight promise: a week of surfable hours resolves the same
+    // spot dozens of times concurrently, and caching only the settled value
+    // would let every one of them fire its own request.
+    let pending = this.spotNameCache.get(spotId);
+    if (!pending) {
+      pending = this.surflineClient!.getSpotInfo(spotId)
+        .then((spotInfo) => spotInfo.name)
+        .catch(() => {
+          console.error(
+            `Warning: Could not fetch name for spot ${spotId}, using ID instead`,
+          );
+          this.spotNameCache.delete(spotId);
+          return spotId;
+        });
+      this.spotNameCache.set(spotId, pending);
+    }
+    return pending;
   }
 
   private formatSpotDisplay(spotName: string, spotId: string): string {
     return spotName === spotId ? spotId : `${spotName} (${spotId})`;
   }
 
-  private formatWindInfo(windSpeed: number, windDirection: number, windDirectionType: string): string {
+  private formatWindInfo(
+    windSpeed: number,
+    windDirection: number,
+    windDirectionType: string,
+  ): string {
     const getWindDirectionAbbreviation = (degrees: number): string => {
-      const directions = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+      const directions = [
+        'N',
+        'NNE',
+        'NE',
+        'ENE',
+        'E',
+        'ESE',
+        'SE',
+        'SSE',
+        'S',
+        'SSW',
+        'SW',
+        'WSW',
+        'W',
+        'WNW',
+        'NW',
+        'NNW',
+      ];
       const index = Math.round(degrees / 22.5) % 16;
       return directions[index];
     };
@@ -729,34 +935,37 @@ Environment variables required:
 
     const directionAbbr = getWindDirectionAbbreviation(windDirection);
     const formattedType = formatWindDirectionType(windDirectionType);
-    
+
     return `${Math.round(windSpeed)} kts ${directionAbbr} (${formattedType})`;
   }
 
-  private setupErrorHandling(): void {
-    this.server.onerror = (error) => {
-      console.error('[MCP Error]', error);
-    };
+  async connect(transport: Transport): Promise<void> {
+    await this.server.connect(transport);
+  }
 
-    process.on('SIGINT', async () => {
-      await this.server.close();
-      process.exit(0);
-    });
+  async close(): Promise<void> {
+    await this.server.close();
   }
 
   async run(): Promise<void> {
-    const transport = new StdioServerTransport();
-    await this.server.connect(transport);
-    console.error('Surfcal MCP server running on stdio');
+    await this.connect(new StdioServerTransport());
+    console.error('surfline-mcp running on stdio');
   }
 }
 
 async function main() {
-  const server = new SurfcalMCPServer();
+  const server = new SurflineMCPServer();
+  for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+    process.once(signal, () => {
+      void server.close().finally(() => process.exit(0));
+    });
+  }
   await server.run();
 }
 
-main().catch((error) => {
-  console.error('Failed to start server:', error);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((error) => {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  });
+}

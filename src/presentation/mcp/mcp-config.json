@@ -1,11 +1,12 @@
 {
   "mcpServers": {
-    "surfcal": {
-      "command": "node",
-      "args": ["dist/presentation/mcp/server.js"],
+    "surfline-mcp": {
+      "command": "/absolute/path/to/node",
+      "args": [
+        "/absolute/path/to/surfline-mcp/dist/presentation/mcp/server.js"
+      ],
       "env": {
-        "SURFLINE_EMAIL": "${SURFLINE_EMAIL}",
-        "SURFLINE_PASSWORD": "${SURFLINE_PASSWORD}"
+        "DOTENV_CONFIG_PATH": "/absolute/path/to/surfline-mcp/.env"
       }
     }
   }

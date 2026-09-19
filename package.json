@@ -1,57 +1,34 @@
 {
-  "name": "surfcal",
+  "name": "surfline-mcp",
   "version": "1.0.0",
-  "description": "",
-  "main": "dist/index.js",
+  "description": "Authenticate with Surfline to give agents access to premium forecasts, surfable hours and spot discovery over MCP.",
+  "main": "dist/presentation/mcp/server.js",
   "bin": {
-    "surfcal": "dist/presentation/cli/index.js",
-    "surfcal-mcp": "dist/presentation/mcp/server.js"
+    "surfline-mcp": "dist/presentation/mcp/server.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
-    "asynckit": "^0.4.0",
-    "axios": "^1.11.0",
-    "call-bind-apply-helpers": "^1.0.2",
-    "combined-stream": "^1.0.8",
-    "delayed-stream": "^1.0.0",
-    "dunder-proto": "^1.0.1",
-    "es-define-property": "^1.0.1",
-    "es-errors": "^1.3.0",
-    "es-object-atoms": "^1.1.1",
-    "es-set-tostringtag": "^2.1.0",
-    "follow-redirects": "^1.15.11",
-    "form-data": "^4.0.4",
-    "function-bind": "^1.1.2",
-    "get-intrinsic": "^1.3.0",
-    "get-proto": "^1.0.1",
-    "gopd": "^1.2.0",
-    "has-symbols": "^1.1.0",
-    "has-tostringtag": "^1.0.2",
-    "hasown": "^2.0.2",
-    "math-intrinsics": "^1.1.0",
-    "mime-db": "^1.52.0",
-    "mime-types": "^2.1.35",
-    "proxy-from-env": "^1.1.0",
-    "typescript": "^5.9.2",
-    "undici-types": "^7.10.0"
+    "dotenv": "^17.2.2",
+    "impit": "^0.14.5"
   },
   "devDependencies": {
     "@types/jest": "^28.0.0",
     "@types/node": "^20.12.12",
-    "dotenv": "^17.2.2",
     "jest": "^28.0.0",
     "prettier": "^3.6.2",
-    "ts-jest": "^28.0.0"
+    "ts-jest": "^28.0.0",
+    "typescript": "^5.9.2"
   },
   "engines": {
-    "node": "^18.14.0 || ^20.0.0"
+    "node": "^26.0.0"
   },
   "scripts": {
-    "build": "tsc",
-    "start": "npm run build && node dist/presentation/cli/index.js",
-    "start:mcp": "npm run build && node dist/presentation/mcp/server.js",
+    "build": "node scripts/clean-dist.js && tsc && chmod +x dist/presentation/mcp/server.js",
+    "start": "node dist/presentation/mcp/server.js",
+    "start:mcp": "node dist/presentation/mcp/server.js",
     "test": "jest",
-    "test:mcp": "node test-mcp.js",
+    "test:mcp": "jest --runInBand src/presentation/mcp",
+    "test:live": "SURFLINE_LIVE_TESTS=1 jest --runInBand src/infrastructure/surfline_client/surfline_client.contract.spec.ts",
     "lint": "prettier --check .",
     "lint:fix": "prettier --write ."
   },

@@ -8,13 +8,18 @@ const password = process.env.SURFLINE_PASSWORD as string;
 const spotId = '584204214e65fad6a7709cef';
 
 const clients: { name: string; client: SurflineClient }[] = [
-  { name: 'SurflineHttpClient', client: new SurflineHttpClient() },
+  ...(process.env.SURFLINE_LIVE_TESTS === '1'
+    ? [{ name: 'SurflineHttpClient', client: new SurflineHttpClient() }]
+    : []),
   { name: 'SurflineFakeClient', client: new SurflineFakeClient() },
 ];
 
 describe.each(clients)('$name Contract Tests', ({ name, client }) => {
   beforeAll(async () => {
-    await client.login(email, password);
+    await client.login(
+      name === 'SurflineFakeClient' ? 'test@example.com' : email,
+      name === 'SurflineFakeClient' ? 'test-password' : password,
+    );
   }, 30000);
 
   it('should be logged in successfully', () => {
@@ -104,10 +109,10 @@ describe.each(clients)('$name Contract Tests', ({ name, client }) => {
       expect(searchResults).toBeDefined();
       expect(searchResults.spots).toBeDefined();
       expect(Array.isArray(searchResults.spots)).toBe(true);
-      
+
       // Ensure we actually found results - both clients should return Great Western
       expect(searchResults.spots.length).toBeGreaterThan(0);
-      
+
       const firstSpot = searchResults.spots[0];
       expect(firstSpot._id).toBeDefined();
       expect(typeof firstSpot._id).toBe('string');
@@ -160,7 +165,7 @@ describe.each(clients)('$name Contract Tests', ({ name, client }) => {
         expect(spot.location.coordinates.length).toBe(2);
         expect(typeof spot.location.coordinates[0]).toBe('number');
         expect(typeof spot.location.coordinates[1]).toBe('number');
-        
+
         // Region and country should be present
         expect(spot.region).toBeDefined();
         expect(typeof spot.region).toBe('string');
@@ -206,8 +211,8 @@ describe.each(clients)('$name Contract Tests', ({ name, client }) => {
       }
 
       // Validate that all results contain Pipeline in the name (case-insensitive)
-      [searchResults1, searchResults2, searchResults3].forEach(result => {
-        result.spots.forEach(spot => {
+      [searchResults1, searchResults2, searchResults3].forEach((result) => {
+        result.spots.forEach((spot) => {
           expect(spot.name.toLowerCase()).toContain('pipeline');
         });
       });
@@ -256,7 +261,7 @@ describe.each(clients)('$name Contract Tests', ({ name, client }) => {
         expect(spot.location.coordinates.length).toBe(2);
         expect(typeof spot.location.coordinates[0]).toBe('number');
         expect(typeof spot.location.coordinates[1]).toBe('number');
-        
+
         // Region and country should be present
         expect(spot.region).toBeDefined();
         expect(typeof spot.region).toBe('string');
@@ -279,7 +284,7 @@ describe.each(clients)('$name Contract Tests', ({ name, client }) => {
       expect(greatWestern.name).toBe('Great Western');
       expect(greatWestern.region).toBe('Cornwall');
       expect(greatWestern.country).toBe('United Kingdom');
-      
+
       // Validate coordinates structure
       expect(greatWestern.location.coordinates).toBeDefined();
       expect(Array.isArray(greatWestern.location.coordinates)).toBe(true);

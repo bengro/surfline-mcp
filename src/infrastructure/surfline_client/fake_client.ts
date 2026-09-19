@@ -357,10 +357,11 @@ export class SurflineFakeClient implements SurflineClient {
 
     // Simple search logic - match by name, region, or country (case insensitive)
     const searchTerm = query.trim().toLowerCase();
-    const matchingSpots = fakeSpots.filter(spot => 
-      spot.name.toLowerCase().includes(searchTerm) ||
-      spot.region?.toLowerCase().includes(searchTerm) ||
-      spot.country?.toLowerCase().includes(searchTerm)
+    const matchingSpots = fakeSpots.filter(
+      (spot) =>
+        spot.name.toLowerCase().includes(searchTerm) ||
+        spot.region?.toLowerCase().includes(searchTerm) ||
+        spot.country?.toLowerCase().includes(searchTerm),
     );
 
     return { spots: matchingSpots };
