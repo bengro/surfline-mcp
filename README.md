@@ -134,4 +134,4 @@ product on it** without talking to Surfline first.
 
 ## 📄 License
 
-ISC
+[0BSD](LICENSE) — do whatever you like with this, no attribution required.

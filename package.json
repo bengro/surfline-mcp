@@ -33,6 +33,6 @@
     "lint:fix": "prettier --write ."
   },
   "keywords": [],
-  "author": "",
-  "license": "ISC"
+  "author": "Ben Grohbiel",
+  "license": "0BSD"
 }
