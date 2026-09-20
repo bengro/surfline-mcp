@@ -85,7 +85,7 @@ The server authenticates on its first tool call and uses the resulting access to
 | `get_surfable_hours_week`     | `spotId`, optional criteria                                                   | Qualifying hours over the next seven days                              |
 | `get_surfable_hours_date`     | `spotId`, `date` (`DD/MM/YYYY`, UTC), optional criteria                       | Qualifying hours on the requested date, within the available forecast  |
 
-The surfable-hours tools accept **`waveMin`** (feet, **default 2**) and **`ratingMin`** (default `POOR_TO_FAIR`). Ratings are `VERY_POOR`, `POOR`, `POOR_TO_FAIR`, `FAIR`, `GOOD`, and `VERY_GOOD`. These tools retain the project's daylight and conditions filtering. Use `get_spot_forecast` when the agent should decide which conditions are suitable or interpret dates in a spot's local timezone.
+The surfable-hours tools accept **`waveMin`** (feet, **default 1**) and **`ratingMin`** (default `POOR_TO_FAIR`). Ratings are `VERY_POOR`, `POOR`, `POOR_TO_FAIR`, `FAIR`, `GOOD`, and `VERY_GOOD`. These tools retain the project's daylight and conditions filtering. Use `get_spot_forecast` when the agent should decide which conditions are suitable or interpret dates in a spot's local timezone.
 
 Successful tool responses contain JSON in MCP text content, including empty results. Raw forecasts retain Surfline response metadata, Unix timestamps in seconds, and available UTC offsets. Requested units are **feet** for surf height, **knots** for wind speed, **metres** for tides, and **Celsius** for temperature. Coordinates are longitude, latitude. Surfable-hour start/end times are ISO 8601 UTC strings, so agents can compare them directly with calendar events.
 

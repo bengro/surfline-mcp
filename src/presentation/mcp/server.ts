@@ -141,12 +141,12 @@ export class SurflineMCPServer {
                 },
                 waveMin: {
                   type: 'number',
-                  description: 'Minimum wave height in feet (default: 2)',
+                  description: `Minimum wave height in feet (default: ${DEFAULT_SURF_CRITERIA.minWaveHeight})`,
                   minimum: 0,
                 },
                 ratingMin: {
                   type: 'string',
-                  description: 'Minimum surf rating (default: POOR_TO_FAIR)',
+                  description: `Minimum surf rating (default: ${DEFAULT_SURF_CRITERIA.minRating})`,
                   enum: [
                     'VERY_POOR',
                     'POOR',
@@ -173,12 +173,12 @@ export class SurflineMCPServer {
                 },
                 waveMin: {
                   type: 'number',
-                  description: 'Minimum wave height in feet (default: 2)',
+                  description: `Minimum wave height in feet (default: ${DEFAULT_SURF_CRITERIA.minWaveHeight})`,
                   minimum: 0,
                 },
                 ratingMin: {
                   type: 'string',
-                  description: 'Minimum surf rating (default: POOR_TO_FAIR)',
+                  description: `Minimum surf rating (default: ${DEFAULT_SURF_CRITERIA.minRating})`,
                   enum: [
                     'VERY_POOR',
                     'POOR',
@@ -205,12 +205,12 @@ export class SurflineMCPServer {
                 },
                 waveMin: {
                   type: 'number',
-                  description: 'Minimum wave height in feet (default: 2)',
+                  description: `Minimum wave height in feet (default: ${DEFAULT_SURF_CRITERIA.minWaveHeight})`,
                   minimum: 0,
                 },
                 ratingMin: {
                   type: 'string',
-                  description: 'Minimum surf rating (default: POOR_TO_FAIR)',
+                  description: `Minimum surf rating (default: ${DEFAULT_SURF_CRITERIA.minRating})`,
                   enum: [
                     'VERY_POOR',
                     'POOR',
@@ -242,12 +242,12 @@ export class SurflineMCPServer {
                 },
                 waveMin: {
                   type: 'number',
-                  description: 'Minimum wave height in feet (default: 2)',
+                  description: `Minimum wave height in feet (default: ${DEFAULT_SURF_CRITERIA.minWaveHeight})`,
                   minimum: 0,
                 },
                 ratingMin: {
                   type: 'string',
-                  description: 'Minimum surf rating (default: POOR_TO_FAIR)',
+                  description: `Minimum surf rating (default: ${DEFAULT_SURF_CRITERIA.minRating})`,
                   enum: [
                     'VERY_POOR',
                     'POOR',
@@ -479,8 +479,8 @@ Available Tools:
 - search_spots: Search for surf spots by name, region, or location to get spot IDs
 
 Surfable-hours tools require a spotId parameter (Surfline spot ID) and optionally accept:
-- waveMin: Minimum wave height in feet (default: 2)
-- ratingMin: Minimum surf rating (default: POOR_TO_FAIR)
+- waveMin: Minimum wave height in feet (default: ${DEFAULT_SURF_CRITERIA.minWaveHeight})
+- ratingMin: Minimum surf rating (default: ${DEFAULT_SURF_CRITERIA.minRating})
 
 Wind Data Included:
 - Wind speed in knots (kts)
@@ -489,7 +489,7 @@ Wind Data Included:
 - Formatted wind info for easy interpretation
 
 The server filters conditions based on:
-- Configurable minimum wave height (default: 2 feet)
+- Configurable minimum wave height (default: ${DEFAULT_SURF_CRITERIA.minWaveHeight} ft)
 - Configurable minimum rating (default: "Poor to Fair" or better)
 - Daylight hours only
 

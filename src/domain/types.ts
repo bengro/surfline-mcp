@@ -16,6 +16,6 @@ export interface SurfCriteria {
 }
 
 export const DEFAULT_SURF_CRITERIA: SurfCriteria = {
-  minWaveHeight: 2,
+  minWaveHeight: 1,
   minRating: 'POOR_TO_FAIR',
 };
