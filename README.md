@@ -17,7 +17,7 @@ You supply your Surfline credentials; the server handles authentication and fore
 
 You need a Surfline account with access to the premium forecasts you want to retrieve. Use that account’s email and password below.
 
-Use **Node.js 26**. `.tool-versions` selects your system-installed Node rather than an older asdf runtime. Then install and build:
+Use **Node.js 26**. `.tool-versions` pins **26.7.0**; with [asdf](https://asdf-vm.com), `asdf install` picks it up. Then install and build:
 
 ```sh
 npm ci
